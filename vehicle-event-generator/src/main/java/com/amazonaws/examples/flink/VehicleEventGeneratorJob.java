@@ -24,8 +24,8 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
 
-public class VehicleDataGeneratorJob {
-    private static final Logger LOGGER = LoggerFactory.getLogger(VehicleDataGeneratorJob.class);
+public class VehicleEventGeneratorJob {
+    private static final Logger LOGGER = LoggerFactory.getLogger(VehicleEventGeneratorJob.class);
 
     private static final String DEFAULT_TOPIC_NAME = "vehicle-events";
 
@@ -43,7 +43,7 @@ public class VehicleDataGeneratorJob {
         if (env instanceof LocalStreamEnvironment) {
             LOGGER.info("Loading application properties from '{}'", LOCAL_APPLICATION_PROPERTIES_RESOURCE);
             return KinesisAnalyticsRuntime.getApplicationProperties(
-                    VehicleDataGeneratorJob.class.getClassLoader()
+                    VehicleEventGeneratorJob.class.getClassLoader()
                             .getResource(LOCAL_APPLICATION_PROPERTIES_RESOURCE).getPath());
         } else {
             LOGGER.info("Loading application properties from Amazon Managed Service for Apache Flink");
@@ -104,6 +104,6 @@ public class VehicleDataGeneratorJob {
                 .sinkTo(kafkaSink);
 
         // Execute the job
-        env.execute("Vehicle Data Generator");
+        env.execute("Vehicle Event Generator");
     }
 }

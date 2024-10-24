@@ -11,7 +11,8 @@
 
     <name>Flink : Connectors : Prometheus : AWS IoT demo</name>
     <modules>
-        <module>vehicle-data-generator</module>
+        <module>vehicle-event-generator</module>
+        <module>pre-processor</module>
     </modules>
 
     <properties>

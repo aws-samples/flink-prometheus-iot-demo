@@ -8,9 +8,9 @@
         <artifactId>flink-prometheus-iot-demo</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <artifactId>vehicle-data-generator</artifactId>
+    <artifactId>pre-processor</artifactId>
 
-    <name>Flink : Connectors : Prometheus : AWS IoT demo : Vehicle Data Generator</name>
+    <name>Flink : Connectors : Prometheus : AWS IoT demo : Vehicle Event Pre-Processor</name>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -19,6 +19,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-prometheus</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-java</artifactId>
@@ -119,7 +124,7 @@
                                         implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer
                                         implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.amazonaws.examples.flink.VehicleDataGeneratorJob</mainClass>
+                                    <mainClass>com.amazonaws.examples.flink.PreProcessorJob</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
@@ -128,5 +133,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>
