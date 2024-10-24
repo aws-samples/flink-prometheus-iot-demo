@@ -2,6 +2,7 @@ package com.amazonaws.examples.flink.datagen;
 
 import org.apache.flink.annotation.VisibleForTesting;
 
+import com.amazonaws.examples.flink.domain.EventType;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
 import org.apache.commons.lang3.RandomUtils;
 import org.slf4j.Logger;
@@ -12,7 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 
-import static com.amazonaws.examples.flink.domain.VehicleEvent.EventType.EVENT_TYPES;
+import static com.amazonaws.examples.flink.domain.EventType.EVENT_TYPES;
 import static java.util.Map.entry;
 
 /**
@@ -23,6 +24,8 @@ import static java.util.Map.entry;
  */
 public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<VehicleEvent> {
     private static final Logger LOG = LoggerFactory.getLogger(VehicleEventGeneratorFunction.class);
+
+    public static final String[] REGIONS = {"NAMER", "EMEA", "LATAM", "APJ"};
 
     public static final int MAX_IC_RPM = 3000;
     public static final int MIN_IC_RPM = 0;
@@ -57,7 +60,13 @@ public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<Veh
 
     @VisibleForTesting
     static class VehicleEventGenerator implements BiFunction<Long, KeyIndexSplit, VehicleEvent>, Serializable {
-        private final Map<Integer, Map<VehicleEvent.EventType, Integer>> lastMeasurements = new HashMap<>();
+        private final Map<Integer, Map<EventType, Integer>> lastMeasurements = new HashMap<>();
+
+        // Deterministically decide the Region of each vehicle
+        private String getVehicleRegion(int vehicleIndex) {
+            return REGIONS[vehicleIndex % REGIONS.length];
+        }
+
 
         /**
          * Generates a semi-random new measurement, for a specific vehicle index and event type, considering the previous value
@@ -65,15 +74,15 @@ public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<Veh
          * The goal is to make more or less realistic the generated events, that will randomly oscillate between min
          * and max values, as opposed to jumping to a random value at every new event
          */
-        private Integer nextMeasurement(int vehicleIndex, VehicleEvent.EventType eventType) {
+        private Integer nextMeasurement(int vehicleIndex, EventType eventType) {
             // Use the previous value as base value
-            Map<VehicleEvent.EventType, Integer> lastVehicleMeasurements = lastMeasurements.getOrDefault(
+            Map<EventType, Integer> lastVehicleMeasurements = lastMeasurements.getOrDefault(
                     vehicleIndex,
                     new HashMap<>(
                             Map.ofEntries(
-                                    entry(VehicleEvent.EventType.IC_RPM, 0),
-                                    entry(VehicleEvent.EventType.ELECTRIC_RPM, 0),
-                                    entry(VehicleEvent.EventType.WARNINGS, 0)))
+                                    entry(EventType.IC_RPM, 0),
+                                    entry(EventType.ELECTRIC_RPM, 0),
+                                    entry(EventType.WARNINGS, 0)))
             );
             int lastMeasurement = lastVehicleMeasurements.get(eventType);
 
@@ -102,16 +111,19 @@ public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<Veh
             // Vehicle ID
             String vehicleId = vehicleId(vehicleIndex);
 
+            // Vehicle region
+            String region = getVehicleRegion(vehicleIndex);
+
             // Event timestamp
             long eventTimestamp = System.currentTimeMillis();
 
             // Random event type
-            VehicleEvent.EventType eventType = EVENT_TYPES[RandomUtils.nextInt(0, EVENT_TYPES.length)];
+            EventType eventType = EVENT_TYPES[RandomUtils.nextInt(0, EVENT_TYPES.length)];
 
             // Semi-Random new measurement
             int measurement = nextMeasurement(vehicleIndex, eventType);
 
-            return new VehicleEvent(eventType, vehicleId, eventTimestamp, measurement);
+            return new VehicleEvent(eventType, vehicleId, eventTimestamp, measurement, region);
         }
 
         @Override

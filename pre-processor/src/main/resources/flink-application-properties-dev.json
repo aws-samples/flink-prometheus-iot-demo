@@ -6,5 +6,11 @@
       "topic": "vehicle-events",
       "group.id": "pre-processor"
     }
+  },
+  {
+    "PropertyGroupId": "PrometheusSink",
+    "PropertyMap": {
+      "endpoint.url": "<remote-write-endpoint-url>"
+    }
   }
 ]

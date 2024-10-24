@@ -1,0 +1,42 @@
+package com.amazonaws.examples.flink.domain;
+
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
+
+/**
+ * Adds the vehicle model to each Vehicle vent
+ */
+@EqualsAndHashCode(callSuper = true)
+@Data
+@NoArgsConstructor
+public class EnrichedVehicleEvent extends VehicleEvent {
+    @NonNull
+    private String vehicleModel;
+
+    public EnrichedVehicleEvent(@NonNull EventType eventType, @NonNull String vehicleId, long timestamp, int measurement, String region, String vehicleModel) {
+        super(eventType, vehicleId, timestamp, measurement, region);
+        this.vehicleModel = vehicleModel;
+    }
+
+    public static EnrichedVehicleEvent copyFrom(VehicleEvent vehicleEvent, String vehicleModel) {
+        return new EnrichedVehicleEvent(
+                vehicleEvent.getEventType(),
+                vehicleEvent.getVehicleId(),
+                vehicleEvent.getTimestamp(),
+                vehicleEvent.getMeasurement(),
+                vehicleEvent.getRegion(),
+                vehicleModel);
+    }
+
+    public static EnrichedVehicleEvent copyWithNewMeasurement(EnrichedVehicleEvent vehicleEvent, int newMeasurement) {
+        return new EnrichedVehicleEvent(
+                vehicleEvent.getEventType(),
+                vehicleEvent.getVehicleId(),
+                vehicleEvent.getTimestamp(),
+                newMeasurement,
+                vehicleEvent.getRegion(),
+                vehicleEvent.getVehicleModel());
+    }
+}

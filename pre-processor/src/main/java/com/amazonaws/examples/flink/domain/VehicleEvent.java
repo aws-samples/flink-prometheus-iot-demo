@@ -8,15 +8,9 @@ import lombok.NonNull;
 
 @Data
 @AllArgsConstructor
-@NoArgsConstructor @Builder
+@NoArgsConstructor
+@Builder
 public class VehicleEvent {
-    public enum EventType {
-        IC_RPM,
-        ELECTRIC_RPM,
-        WARNINGS;
-
-        public static final EventType[] EVENT_TYPES = {IC_RPM, ELECTRIC_RPM, WARNINGS};
-    }
 
     @NonNull
     private EventType eventType;
@@ -24,4 +18,6 @@ public class VehicleEvent {
     private String vehicleId;
     private long timestamp;
     private int measurement;
+    @NonNull
+    private String region;
 }
