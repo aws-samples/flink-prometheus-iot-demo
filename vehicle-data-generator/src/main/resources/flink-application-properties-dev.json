@@ -1,0 +1,16 @@
+[
+  {
+    "PropertyGroupId": "DataGen",
+    "PropertyMap": {
+      "events.per.sec": "100",
+      "vehicles": "500"
+    }
+  },
+  {
+    "PropertyGroupId": "KafkaSink",
+    "PropertyMap": {
+      "bootstrap.servers": "localhost:9092",
+      "topic": "vehicle-events"
+    }
+  }
+]
