@@ -1,6 +1,9 @@
 package com.amazonaws.examples.flink;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.OpenContext;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
 import org.apache.flink.connector.base.DeliveryGuarantee;
@@ -9,6 +12,8 @@ import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
+import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.PropertiesUtil;
 import org.apache.flink.util.function.SerializableFunction;
@@ -23,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Function;
 
 public class VehicleEventGeneratorJob {
     private static final Logger LOGGER = LoggerFactory.getLogger(VehicleEventGeneratorJob.class);
@@ -105,5 +111,37 @@ public class VehicleEventGeneratorJob {
 
         // Execute the job
         env.execute("Vehicle Event Generator");
+    }
+
+    // FIXME delete me
+    @Deprecated
+    private static class OrderChecker<K, E> extends KeyedProcessFunction<K, E, E> {
+        private transient ValueState<Long> lastRecordTimestampState;
+
+        private final Function<E, Long> timestampExtractor;
+
+        public OrderChecker(Function<E, Long> timestampExtractor) {
+            this.timestampExtractor = timestampExtractor;
+        }
+
+        @Override
+        public void open(OpenContext openContext) throws Exception {
+            ValueStateDescriptor<Long> descriptor = new ValueStateDescriptor<>("lastRecordTimestamp", Long.class);
+            lastRecordTimestampState = getRuntimeContext().getState(descriptor);
+        }
+
+        @Override
+        public void processElement(E value, KeyedProcessFunction<K, E, E>.Context ctx, Collector<E> out) throws Exception {
+            Long prevRecordTimestamp = lastRecordTimestampState.value();
+            if (prevRecordTimestamp == null) {
+                prevRecordTimestamp = 0L;
+            }
+            long currentTimestamp = timestampExtractor.apply(value);
+            if (currentTimestamp > 0 && currentTimestamp <= prevRecordTimestamp) {
+                LOGGER.warn("Detected out of order record: curr ts {}. Prev ts {}, key {}", value, prevRecordTimestamp, ctx.getCurrentKey());
+            }
+            lastRecordTimestampState.update(Math.max(currentTimestamp, prevRecordTimestamp));
+            out.collect(value);
+        }
     }
 }

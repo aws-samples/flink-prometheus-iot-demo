@@ -37,13 +37,13 @@ public class VehiclesInMotionAggregateFunction implements AggregateFunction<Enri
         switch (event.getEventType()) {
             case IC_RPM:
             case ELECTRIC_RPM:
+                accumulator.lastTimestamp = Math.max(accumulator.lastTimestamp, event.getTimestamp());
+
                 if (event.getMeasurement() != 0) {
                     // The vehicle is in motion
                     String vehicleId = event.getVehicleId();
                     accumulator.vehiclesInMotion.add(vehicleId);
-
                 }
-                accumulator.lastTimestamp = event.getTimestamp();
                 return accumulator;
             default:
                 // Any other event does not change the accumulator

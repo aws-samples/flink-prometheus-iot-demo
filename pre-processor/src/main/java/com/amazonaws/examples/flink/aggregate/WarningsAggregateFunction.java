@@ -35,9 +35,10 @@ public class WarningsAggregateFunction implements AggregateFunction<EnrichedVehi
         Preconditions.checkArgument(accumulator.region == null || accumulator.region.equals(event.getRegion()), "Cannot accumulate different regions");
         accumulator.region = event.getRegion();
         accumulator.vehicleModel = event.getVehicleModel();
-        accumulator.lastTimestamp = event.getTimestamp();
 
         if( event.getEventType() == EventType.WARNINGS ) {
+            accumulator.lastTimestamp = Math.max(accumulator.lastTimestamp, event.getTimestamp());
+
             String vehicleId = event.getVehicleId();
             // If this vehicle has not been assessed already, add its warning count
             if(!accumulator.assessedVehicles.contains(vehicleId)) {

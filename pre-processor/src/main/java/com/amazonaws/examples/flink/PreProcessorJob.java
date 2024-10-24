@@ -1,6 +1,9 @@
 package com.amazonaws.examples.flink;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.OpenContext;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
@@ -10,16 +13,17 @@ import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeries;
 import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeriesLabelsAndMetricNameKeySelector;
 import org.apache.flink.connector.prometheus.sink.aws.AmazonManagedPrometheusWriteRequestSigner;
 import org.apache.flink.formats.json.JsonDeserializationSchema;
-import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.PropertiesUtil;
 
 import com.amazonaws.examples.flink.aggregate.VehiclesInMotionAggregateFunction;
 import com.amazonaws.examples.flink.aggregate.WarningsAggregateFunction;
-import com.amazonaws.examples.flink.domain.AggregateVehicleEvent;
 import com.amazonaws.examples.flink.domain.EnrichedVehicleEvent;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
 import com.amazonaws.examples.flink.enrich.VehicleModelEnrichmentFunction;
@@ -33,6 +37,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Function;
 
 import static org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration.OnErrorBehavior.DISCARD_AND_CONTINUE;
 
@@ -99,6 +104,7 @@ public class PreProcessorJob {
                 .setErrorHandlingBehaviourConfiguration(PrometheusSinkConfiguration.SinkWriterErrorHandlingBehaviorConfiguration.builder()
                         .onMaxRetryExceeded(DISCARD_AND_CONTINUE)
                         .build())
+                .setMetricGroupName("kinesisAnalytics") // Forward connector metrics to CloudWatch
                 .build();
     }
 
@@ -113,39 +119,73 @@ public class PreProcessorJob {
         // Kafka source
         KafkaSource<VehicleEvent> kafkaSource = createKafkaSource(applicationParameters.get("KafkaSource"), VehicleEvent.class);
 
-        // Prometheus sink
-        Sink<PrometheusTimeSeries> prometheusSink = createPrometheusSink(applicationParameters.get("PrometheusSink"));
-
-
         /// Define the data flow
 
-        DataStream<EnrichedVehicleEvent> enrichedVehicleEvents = env
+        KeyedStream<EnrichedVehicleEvent, String> enrichedVehicleEvents = env
                 // Read raw events from Kafka
                 .fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "KafkaSource").uid("kafka-source")
-                // Enrich each event with vehicle model
-                .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model");
-
-        // Aggregate the number of vehicle in motions, per model, per region, every 5 seconds
-        DataStream<AggregateVehicleEvent> vehicleInMotions = enrichedVehicleEvents
-                .keyBy(EnrichedVehicleEvent::getVehicleId) // Partition by vehicle ID
+                // Enrich with model
+                .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model")
+                // Partition by vehicle model and region
+                .keyBy(evt -> evt.getVehicleModel() + evt.getRegion());
+        
+        enrichedVehicleEvents
+                // Aggregate counting vehicle in motion, per model and per region, every 5 seconds
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new VehiclesInMotionAggregateFunction());
+                .aggregate(new VehiclesInMotionAggregateFunction()).name("AggregateVehiclesInMotion")
+                // Map to Prometheus sink input objects
+                .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapVehicleInMotionToPromTS")
+                // Key-by time series to ensure order is retained
+                .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector())
+                // Sink to Prometheus
+                .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSinkVehInMotion").uid("sink-in-motion");
 
-        // Calculate the number of warnings, per model, per region, every 5 seconds
-        DataStream<AggregateVehicleEvent> warnings = enrichedVehicleEvents
-                .keyBy(EnrichedVehicleEvent::getVehicleId) // Partition by vehicle ID
+
+        enrichedVehicleEvents
+                // Aggregate counting warnings, per model and per region, every 5 seconds
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new WarningsAggregateFunction());
+                .aggregate(new WarningsAggregateFunction()).name("AggregateWarnings")
+                // Map to Prometheus sink input objects
+                .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapWarningsToPromTS")
+                // Key-by time series to ensure order is retained
+                .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector()) // Key-by time series to ensure order is retained
+                // Sink to Prometheus
+                .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSinkWarnings").uid("sink-warnings");
 
-        // Map the aggregate records to input records for the Prometheus sink
-        vehicleInMotions
-                .union(warnings) // Merge the streams
-                .keyBy(aggEvt -> aggEvt.getEventType() + aggEvt.getVehicleModel() + aggEvt.getRegion())  // Partition by aggregated event type, model, and region
-                .map(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapToPrometheusTS") // Map to Prometheus sink input objects
-                .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector()) // Key-by to ensure order is retained
-                .sinkTo(prometheusSink).name("PrometheusSink").uid("prometheus-sink");
 
         // Execute the job
         env.execute("Vehicle Event Pre-processor");
+    }
+
+    // FIXME delete me
+    @Deprecated
+    private static class OrderChecker<K, E> extends KeyedProcessFunction<K, E, E> {
+        private transient ValueState<Long> lastRecordTimestampState;
+
+        private final Function<E, Long> timestampExtractor;
+
+        public OrderChecker(Function<E, Long> timestampExtractor) {
+            this.timestampExtractor = timestampExtractor;
+        }
+
+        @Override
+        public void open(OpenContext openContext) throws Exception {
+            ValueStateDescriptor<Long> descriptor = new ValueStateDescriptor<>("lastRecordTimestamp", Long.class);
+            lastRecordTimestampState = getRuntimeContext().getState(descriptor);
+        }
+
+        @Override
+        public void processElement(E value, KeyedProcessFunction<K, E, E>.Context ctx, Collector<E> out) throws Exception {
+            Long prevRecordTimestamp = lastRecordTimestampState.value();
+            if (prevRecordTimestamp == null) {
+                prevRecordTimestamp = 0L;
+            }
+            long currentTimestamp = timestampExtractor.apply(value);
+            if (currentTimestamp > 0 && currentTimestamp <= prevRecordTimestamp) {
+                LOGGER.warn("Detected out of order record: curr ts {}. Prev ts {}, key {}", value, prevRecordTimestamp, ctx.getCurrentKey());
+            }
+            lastRecordTimestampState.update(Math.max(currentTimestamp, prevRecordTimestamp));
+            out.collect(value);
+        }
     }
 }
