@@ -1,7 +1,6 @@
 package com.amazonaws.examples.flink.map;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeries;
 import org.apache.flink.util.Collector;
 

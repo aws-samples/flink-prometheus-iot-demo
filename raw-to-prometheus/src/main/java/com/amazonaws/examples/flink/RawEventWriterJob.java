@@ -1,51 +1,35 @@
 package com.amazonaws.examples.flink;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.OpenContext;
-import org.apache.flink.api.common.state.ValueState;
-import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.prometheus.sink.PrometheusSink;
-import org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration.RetryConfiguration;
-import org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration.SinkWriterErrorHandlingBehaviorConfiguration;
+import org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration;
 import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeries;
 import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeriesLabelsAndMetricNameKeySelector;
 import org.apache.flink.connector.prometheus.sink.aws.AmazonManagedPrometheusWriteRequestSigner;
 import org.apache.flink.formats.json.JsonDeserializationSchema;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
-import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.PropertiesUtil;
 
-import com.amazonaws.examples.flink.aggregate.VehiclesInMotionAggregateFunction;
-import com.amazonaws.examples.flink.aggregate.WarningsAggregateFunction;
-import com.amazonaws.examples.flink.domain.AggregateVehicleEvent;
-import com.amazonaws.examples.flink.domain.EnrichedVehicleEvent;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
-import com.amazonaws.examples.flink.enrich.VehicleModelEnrichmentFunction;
-import com.amazonaws.examples.flink.map.AggregateEventsToPrometheusTimeSeriesMapper;
+import com.amazonaws.examples.flink.map.VehicleEventToPrometheusTimeSeriesMapper;
 import com.amazonaws.services.kinesisanalytics.runtime.KinesisAnalyticsRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
-import java.util.function.Function;
 
 import static org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration.OnErrorBehavior.DISCARD_AND_CONTINUE;
 
-public class PreProcessorJob {
-    private static final Logger LOGGER = LoggerFactory.getLogger(PreProcessorJob.class);
+public class RawEventWriterJob {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RawEventWriterJob.class);
 
     private static final String DEFAULT_TOPIC_NAME = "vehicle-events";
     private static final String DEFAULT_CONSUMER_GROUP_ID = "pre-processor";
@@ -65,7 +49,7 @@ public class PreProcessorJob {
         if (env instanceof LocalStreamEnvironment) {
             LOGGER.info("Loading application properties from '{}'", LOCAL_APPLICATION_PROPERTIES_RESOURCE);
             return KinesisAnalyticsRuntime.getApplicationProperties(
-                    PreProcessorJob.class.getClassLoader()
+                    RawEventWriterJob.class.getClassLoader()
                             .getResource(LOCAL_APPLICATION_PROPERTIES_RESOURCE).getPath());
         } else {
             LOGGER.info("Loading application properties from Amazon Managed Service for Apache Flink");
@@ -102,9 +86,9 @@ public class PreProcessorJob {
         return PrometheusSink.builder()
                 .setPrometheusRemoteWriteUrl(endpointUrl)
                 .setRequestSigner(new AmazonManagedPrometheusWriteRequestSigner(endpointUrl, awsRegion))
-                .setRetryConfiguration(RetryConfiguration.builder()
+                .setRetryConfiguration(PrometheusSinkConfiguration.RetryConfiguration.builder()
                         .setMaxRetryCount(maxRequestRetryCount).build())
-                .setErrorHandlingBehaviorConfiguration(SinkWriterErrorHandlingBehaviorConfiguration.builder()
+                .setErrorHandlingBehaviorConfiguration(PrometheusSinkConfiguration.SinkWriterErrorHandlingBehaviorConfiguration.builder()
                         .onMaxRetryExceeded(DISCARD_AND_CONTINUE)
                         .build())
                 .setMetricGroupName("kinesisAnalytics") // Forward connector metrics to CloudWatch
@@ -121,73 +105,23 @@ public class PreProcessorJob {
 
         /// Define the data flow
 
-        KeyedStream<EnrichedVehicleEvent, String> enrichedVehicleEvents = env
-                // Read raw events from Kafka
-                .fromSource(
+        // Read raw events from Kafka
+        env.fromSource(
                         createKafkaSource(applicationParameters.get("KafkaSource"), VehicleEvent.class),
                         // No watermark needed for processing-time semantics
                         WatermarkStrategy.noWatermarks(),
                         "KafkaSource"
                 ).uid("kafka-source")
-                // Enrich adding vehicle model
-                .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model")
-                // Partition by vehicle model and region
-                .keyBy(evt -> evt.getVehicleModel() + evt.getRegion());
-
-        DataStream<AggregateVehicleEvent> aggregateVehicleInMotion = enrichedVehicleEvents
-                // Aggregate counting vehicles in motion, per model and per region, every 5 seconds
-                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new VehiclesInMotionAggregateFunction()).name("AggregateVehiclesInMotion").uid("aggregate-in-motion");
-
-        DataStream<AggregateVehicleEvent> aggregateWarnings = enrichedVehicleEvents
-                // Aggregate counting warnings, per model and per region, every 5 seconds
-                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new WarningsAggregateFunction()).name("AggregateWarnings").uid("aggregate-warnings");
-
-        aggregateVehicleInMotion
-                // Merge the two streams
-                .union(aggregateWarnings)
+                // Key by vehicleId and eventType to ensure order is retained
+                .keyBy(evt -> evt.getVehicleId() + evt.getEventType())
                 // Map records to Prometheus sink input records
-                .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapWarningsToPromTS")
+                .map(new VehicleEventToPrometheusTimeSeriesMapper())
                 // Key-by time series to ensure order is retained
                 .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector()) // Key-by time series to ensure order is retained
                 // Attach
                 .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSink").uid("prometheus-sink");
 
-
         // Execute the job
-        env.execute("Vehicle Event Pre-processor");
-    }
-
-    // FIXME delete me
-    @Deprecated
-    private static class OrderChecker<K, E> extends KeyedProcessFunction<K, E, E> {
-        private transient ValueState<Long> lastRecordTimestampState;
-
-        private final Function<E, Long> timestampExtractor;
-
-        public OrderChecker(Function<E, Long> timestampExtractor) {
-            this.timestampExtractor = timestampExtractor;
-        }
-
-        @Override
-        public void open(OpenContext openContext) throws Exception {
-            ValueStateDescriptor<Long> descriptor = new ValueStateDescriptor<>("lastRecordTimestamp", Long.class);
-            lastRecordTimestampState = getRuntimeContext().getState(descriptor);
-        }
-
-        @Override
-        public void processElement(E value, KeyedProcessFunction<K, E, E>.Context ctx, Collector<E> out) throws Exception {
-            Long prevRecordTimestamp = lastRecordTimestampState.value();
-            if (prevRecordTimestamp == null) {
-                prevRecordTimestamp = 0L;
-            }
-            long currentTimestamp = timestampExtractor.apply(value);
-            if (currentTimestamp > 0 && currentTimestamp <= prevRecordTimestamp) {
-                LOGGER.warn("Detected out of order record: curr ts {}. Prev ts {}, key {}", value, prevRecordTimestamp, ctx.getCurrentKey());
-            }
-            lastRecordTimestampState.update(Math.max(currentTimestamp, prevRecordTimestamp));
-            out.collect(value);
-        }
+        env.execute("Raw Vehicle Events to Prometheus");
     }
 }

@@ -13,6 +13,7 @@
     <modules>
         <module>vehicle-event-generator</module>
         <module>pre-processor</module>
+        <module>raw-to-prometheus</module>
     </modules>
 
     <properties>
