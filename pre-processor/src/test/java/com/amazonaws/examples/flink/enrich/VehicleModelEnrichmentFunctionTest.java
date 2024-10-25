@@ -19,6 +19,7 @@ class VehicleModelEnrichmentFunctionTest {
     void shouldReturnTypeA(String vehicleId) throws Exception {
         VehicleEvent vehicleEvent = VehicleEvent.builder()
                 .vehicleId(vehicleId)
+                .region("EMEA")
                 .eventType(EventType.IC_RPM)
                 .measurement(42)
                 .timestamp(0L)
@@ -35,6 +36,7 @@ class VehicleModelEnrichmentFunctionTest {
     void shouldReturnTypeZ(String vehicleId) throws Exception {
         VehicleEvent vehicleEvent = VehicleEvent.builder()
                 .vehicleId(vehicleId)
+                .region("EMEA")
                 .eventType(EventType.IC_RPM)
                 .measurement(42)
                 .timestamp(0L)

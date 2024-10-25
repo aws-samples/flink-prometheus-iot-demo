@@ -13,6 +13,7 @@ import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeries;
 import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeriesLabelsAndMetricNameKeySelector;
 import org.apache.flink.connector.prometheus.sink.aws.AmazonManagedPrometheusWriteRequestSigner;
 import org.apache.flink.formats.json.JsonDeserializationSchema;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -24,6 +25,7 @@ import org.apache.flink.util.PropertiesUtil;
 
 import com.amazonaws.examples.flink.aggregate.VehiclesInMotionAggregateFunction;
 import com.amazonaws.examples.flink.aggregate.WarningsAggregateFunction;
+import com.amazonaws.examples.flink.domain.AggregateVehicleEvent;
 import com.amazonaws.examples.flink.domain.EnrichedVehicleEvent;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
 import com.amazonaws.examples.flink.enrich.VehicleModelEnrichmentFunction;
@@ -101,7 +103,7 @@ public class PreProcessorJob {
                 .setRequestSigner(new AmazonManagedPrometheusWriteRequestSigner(endpointUrl, awsRegion))
                 .setRetryConfiguration(PrometheusSinkConfiguration.RetryConfiguration.builder()
                         .setMaxRetryCount(maxRequestRetryCount).build())
-                .setErrorHandlingBehaviourConfiguration(PrometheusSinkConfiguration.SinkWriterErrorHandlingBehaviorConfiguration.builder()
+                .setErrorHandlingBehaviorConfiguration(PrometheusSinkConfiguration.SinkWriterErrorHandlingBehaviorConfiguration.builder()
                         .onMaxRetryExceeded(DISCARD_AND_CONTINUE)
                         .build())
                 .setMetricGroupName("kinesisAnalytics") // Forward connector metrics to CloudWatch
@@ -116,41 +118,39 @@ public class PreProcessorJob {
             env.setParallelism(2);
         }
 
-        // Kafka source
-        KafkaSource<VehicleEvent> kafkaSource = createKafkaSource(applicationParameters.get("KafkaSource"), VehicleEvent.class);
-
         /// Define the data flow
 
         KeyedStream<EnrichedVehicleEvent, String> enrichedVehicleEvents = env
                 // Read raw events from Kafka
-                .fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "KafkaSource").uid("kafka-source")
-                // Enrich with model
+                .fromSource(
+                        createKafkaSource(
+                                applicationParameters.get("KafkaSource"),
+                                VehicleEvent.class),
+                        WatermarkStrategy.noWatermarks(), "KafkaSource").uid("kafka-source")
+                // Enrich adding vehicle model
                 .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model")
                 // Partition by vehicle model and region
                 .keyBy(evt -> evt.getVehicleModel() + evt.getRegion());
-        
-        enrichedVehicleEvents
+
+        DataStream<AggregateVehicleEvent> aggregateVehicleInMotion = enrichedVehicleEvents
                 // Aggregate counting vehicle in motion, per model and per region, every 5 seconds
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new VehiclesInMotionAggregateFunction()).name("AggregateVehiclesInMotion")
-                // Map to Prometheus sink input objects
-                .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapVehicleInMotionToPromTS")
-                // Key-by time series to ensure order is retained
-                .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector())
-                // Sink to Prometheus
-                .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSinkVehInMotion").uid("sink-in-motion");
+                .aggregate(new VehiclesInMotionAggregateFunction()).name("AggregateVehiclesInMotion").uid("aggregate-veh-in-mot");
 
-
-        enrichedVehicleEvents
+        DataStream<AggregateVehicleEvent> aggregateWarnings = enrichedVehicleEvents
                 // Aggregate counting warnings, per model and per region, every 5 seconds
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new WarningsAggregateFunction()).name("AggregateWarnings")
+                .aggregate(new WarningsAggregateFunction()).name("AggregateWarnings").uid("aggregate-warnings");
+
+        aggregateVehicleInMotion
+                // Merge the two streams
+                .union(aggregateWarnings)
                 // Map to Prometheus sink input objects
                 .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapWarningsToPromTS")
                 // Key-by time series to ensure order is retained
                 .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector()) // Key-by time series to ensure order is retained
-                // Sink to Prometheus
-                .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSinkWarnings").uid("sink-warnings");
+                // Attach
+                .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSink").uid("prometheus-sink");
 
 
         // Execute the job
