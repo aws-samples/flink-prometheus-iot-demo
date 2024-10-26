@@ -4,7 +4,7 @@
     "PropertyMap": {
       "bootstrap.servers": "localhost:9092",
       "topic": "vehicle-events",
-      "group.id": "pre-processor"
+      "group.id": "raw-event-writer"
     }
   },
   {

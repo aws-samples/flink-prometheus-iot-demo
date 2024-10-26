@@ -2,17 +2,20 @@ package com.amazonaws.examples.flink.domain;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.Setter;
+import lombok.ToString;
 
 /**
  * Adds the vehicle model to each Vehicle vent
  */
 @EqualsAndHashCode(callSuper = true)
-@Data
+@Getter @Setter
 @NoArgsConstructor
+@ToString(callSuper = true)
 public class EnrichedVehicleEvent extends VehicleEvent {
-    @NonNull
     private String vehicleModel;
 
     public EnrichedVehicleEvent(@NonNull EventType eventType, @NonNull String vehicleId, long timestamp, int measurement, String region, String vehicleModel) {

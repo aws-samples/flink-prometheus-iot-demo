@@ -8,9 +8,9 @@
         <artifactId>flink-prometheus-iot-demo</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <artifactId>raw-to-prometheus</artifactId>
+    <artifactId>raw-event-writer</artifactId>
 
-    <name>Flink : Connectors : Prometheus : AWS IoT demo : Write Raw Events to Prometheus</name>
+    <name>Flink : Connectors : Prometheus : AWS IoT demo : Raw Events Writer to Prometheus</name>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -90,6 +90,11 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
             <version>${junit5.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-test-utils</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

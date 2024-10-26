@@ -10,14 +10,18 @@ public class AggregateEventsToPrometheusTimeSeriesMapper implements FlatMapFunct
 
     @Override
     public void flatMap(AggregateVehicleEvent aggregateEvent, Collector<PrometheusTimeSeries> out) throws Exception {
-        // Map only records with timestamp > 0
-        if( aggregateEvent.getTimestamp() > 0) {
+        // Only map non-empty aggregates
+        if (!aggregateEvent.isEmpty()) {
             out.collect(PrometheusTimeSeries.builder()
-                    .withMetricName(aggregateEvent.getEventType().name().toLowerCase())
+                    .withMetricName(getMetricName(aggregateEvent))
                     .addLabel("model", aggregateEvent.getVehicleModel())
                     .addLabel("region", aggregateEvent.getRegion())
                     .addSample(aggregateEvent.getCount(), aggregateEvent.getTimestamp())
                     .build());
         }
+    }
+
+    private static String getMetricName(AggregateVehicleEvent aggregateEvent) {
+        return aggregateEvent.getEventType().name().toLowerCase();
     }
 }

@@ -1,6 +1,7 @@
 package com.amazonaws.examples.flink;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
@@ -15,7 +16,6 @@ import org.apache.flink.connector.prometheus.sink.PrometheusTimeSeriesLabelsAndM
 import org.apache.flink.connector.prometheus.sink.aws.AmazonManagedPrometheusWriteRequestSigner;
 import org.apache.flink.formats.json.JsonDeserializationSchema;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
@@ -28,8 +28,10 @@ import com.amazonaws.examples.flink.aggregate.VehiclesInMotionAggregateFunction;
 import com.amazonaws.examples.flink.aggregate.WarningsAggregateFunction;
 import com.amazonaws.examples.flink.domain.AggregateVehicleEvent;
 import com.amazonaws.examples.flink.domain.EnrichedVehicleEvent;
+import com.amazonaws.examples.flink.domain.EventType;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
 import com.amazonaws.examples.flink.enrich.VehicleModelEnrichmentFunction;
+import com.amazonaws.examples.flink.filter.IncludeEventTypes;
 import com.amazonaws.examples.flink.map.AggregateEventsToPrometheusTimeSeriesMapper;
 import com.amazonaws.services.kinesisanalytics.runtime.KinesisAnalyticsRuntime;
 import org.slf4j.Logger;
@@ -116,12 +118,12 @@ public class PreProcessorJob {
         final Map<String, Properties> applicationParameters = loadApplicationProperties(env);
 
         if (isLocal(env)) {
-            env.setParallelism(2);
+            env.setParallelism(4);
         }
 
         /// Define the data flow
 
-        KeyedStream<EnrichedVehicleEvent, String> enrichedVehicleEvents = env
+        DataStream<EnrichedVehicleEvent> enrichedVehicleEvents = env
                 // Read raw events from Kafka
                 .fromSource(
                         createKafkaSource(applicationParameters.get("KafkaSource"), VehicleEvent.class),
@@ -130,17 +132,19 @@ public class PreProcessorJob {
                         "KafkaSource"
                 ).uid("kafka-source")
                 // Enrich adding vehicle model
-                .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model")
-                // Partition by vehicle model and region
-                .keyBy(evt -> evt.getVehicleModel() + evt.getRegion());
+                .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model");
 
         DataStream<AggregateVehicleEvent> aggregateVehicleInMotion = enrichedVehicleEvents
+                .filter(new IncludeEventTypes(EventType.IC_RPM, EventType.ELECTRIC_RPM)) // Only include motor events
                 // Aggregate counting vehicles in motion, per model and per region, every 5 seconds
+                .keyBy(evt -> evt.getVehicleModel() + evt.getRegion()) // Partition by vehicle model and region
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
                 .aggregate(new VehiclesInMotionAggregateFunction()).name("AggregateVehiclesInMotion").uid("aggregate-in-motion");
 
         DataStream<AggregateVehicleEvent> aggregateWarnings = enrichedVehicleEvents
+                .filter(new IncludeEventTypes(EventType.WARNINGS)) // Only include warning events
                 // Aggregate counting warnings, per model and per region, every 5 seconds
+                .keyBy(evt -> evt.getVehicleModel() + evt.getRegion()) // Partition by vehicle model and region
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
                 .aggregate(new WarningsAggregateFunction()).name("AggregateWarnings").uid("aggregate-warnings");
 
@@ -158,6 +162,17 @@ public class PreProcessorJob {
         // Execute the job
         env.execute("Vehicle Event Pre-processor");
     }
+
+    // FIXME remove
+    @Deprecated
+    private static class LoggingMapper implements MapFunction<AggregateVehicleEvent, AggregateVehicleEvent> {
+        @Override
+        public AggregateVehicleEvent map(AggregateVehicleEvent event) throws Exception {
+            LOGGER.info("Event after union: {} (empty: {})", event, event.isEmpty());
+            return event;
+        }
+    }
+
 
     // FIXME delete me
     @Deprecated

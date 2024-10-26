@@ -25,7 +25,12 @@ import static java.util.Map.entry;
 public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<VehicleEvent> {
     private static final Logger LOG = LoggerFactory.getLogger(VehicleEventGeneratorFunction.class);
 
-    public static final String[] REGIONS = {"NAMER", "EMEA", "LATAM", "APJ"};
+    public static final String[] REGIONS = {
+            "France", "Germany", "Italy", "Spain", "Greece", "Norway", "Sweden", "Switzerland", "Portugal", "Austria",
+            "Japan", "South Korea", "China", "India", "Thailand", "Vietnam", "Malaysia", "Indonesia", "Philippines", "Turkey",
+            "Brazil", "Argentina", "Chile", "Colombia", "Peru", "Uruguay", "Ecuador", "Paraguay",
+            "United States", "Canada"
+    };
 
     public static final int MAX_IC_RPM = 3000;
     public static final int MIN_IC_RPM = 0;

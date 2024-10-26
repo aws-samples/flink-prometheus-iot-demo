@@ -9,7 +9,7 @@ dependency-reduced-pom.xml
 *.iws
 *.iml
 *.ipr
-.run
+**/.run
 
 ### Eclipse ###
 .apt_generated
