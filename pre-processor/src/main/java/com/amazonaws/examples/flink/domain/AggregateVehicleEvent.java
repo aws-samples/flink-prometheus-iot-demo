@@ -4,9 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
+/**
+ * Aggregate events, per region, per model
+ */
 @NoArgsConstructor
 @AllArgsConstructor
+@Data
 public class AggregateVehicleEvent {
     public enum AggregateEventType {
         VEHICLES_IN_MOTION,

@@ -1,10 +1,6 @@
 package com.amazonaws.examples.flink;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.OpenContext;
-import org.apache.flink.api.common.state.ValueState;
-import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
@@ -18,14 +14,12 @@ import org.apache.flink.formats.json.JsonDeserializationSchema;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
-import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.PropertiesUtil;
 
-import com.amazonaws.examples.flink.aggregate.VehiclesInMotionAggregateFunction;
-import com.amazonaws.examples.flink.aggregate.WarningsAggregateFunction;
+import com.amazonaws.examples.flink.aggregate.VehiclesInMotionProcessWindowFunction;
+import com.amazonaws.examples.flink.aggregate.WarningsProcessWindowFunction;
 import com.amazonaws.examples.flink.domain.AggregateVehicleEvent;
 import com.amazonaws.examples.flink.domain.EnrichedVehicleEvent;
 import com.amazonaws.examples.flink.domain.EventType;
@@ -33,6 +27,8 @@ import com.amazonaws.examples.flink.domain.VehicleEvent;
 import com.amazonaws.examples.flink.enrich.VehicleModelEnrichmentFunction;
 import com.amazonaws.examples.flink.filter.IncludeEventTypes;
 import com.amazonaws.examples.flink.map.AggregateEventsToPrometheusTimeSeriesMapper;
+import com.amazonaws.examples.flink.monitor.EventTimeExtractor;
+import com.amazonaws.examples.flink.monitor.LagAndRateMonitor;
 import com.amazonaws.services.kinesisanalytics.runtime.KinesisAnalyticsRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +38,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
-import java.util.function.Function;
 
 import static org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration.OnErrorBehavior.DISCARD_AND_CONTINUE;
 
@@ -52,6 +47,8 @@ public class PreProcessorJob {
     private static final String DEFAULT_TOPIC_NAME = "vehicle-events";
     private static final String DEFAULT_CONSUMER_GROUP_ID = "pre-processor";
     private static final int DEFAULT_MAX_REQUEST_RETRY = 100;
+
+    private static final int DEFAULT_AGGREGATION_WINDOW_SEC = 5;
 
     private static boolean isLocal(StreamExecutionEnvironment env) {
         return env instanceof LocalStreamEnvironment;
@@ -115,14 +112,17 @@ public class PreProcessorJob {
 
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        final Map<String, Properties> applicationParameters = loadApplicationProperties(env);
+        Map<String, Properties> applicationParameters = loadApplicationProperties(env);
+        int applicationParallelism = env.getParallelism();
 
         if (isLocal(env)) {
             env.setParallelism(4);
         }
 
+
         /// Define the data flow
 
+        int kafkaSourceMaxParallelism = PropertiesUtil.getInt(applicationParameters.get("KafkaSource"), "max.parallelism", Integer.MAX_VALUE);
         DataStream<EnrichedVehicleEvent> enrichedVehicleEvents = env
                 // Read raw events from Kafka
                 .fromSource(
@@ -131,26 +131,39 @@ public class PreProcessorJob {
                         WatermarkStrategy.noWatermarks(),
                         "KafkaSource"
                 ).uid("kafka-source")
+                // Optionally limit the parallelism of the source, to be <= number of partitions in the Kafka topic
+                .setParallelism(Math.min(applicationParallelism, kafkaSourceMaxParallelism))
                 // Enrich adding vehicle model
                 .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model");
 
+        int aggregationWindowSec = PropertiesUtil.getInt(
+                applicationParameters.get("Aggregation"), "window.size.sec", DEFAULT_AGGREGATION_WINDOW_SEC);
+
         DataStream<AggregateVehicleEvent> aggregateVehicleInMotion = enrichedVehicleEvents
-                .filter(new IncludeEventTypes(EventType.IC_RPM, EventType.ELECTRIC_RPM)) // Only include motor events
-                // Aggregate counting vehicles in motion, per model and per region, every 5 seconds
+                // Only include motor events
+                .filter(new IncludeEventTypes(EventType.IC_RPM, EventType.ELECTRIC_RPM))
+                // Aggregate counting vehicles in motion, per model and per region, every `aggregationWindowSec` seconds
                 .keyBy(evt -> evt.getVehicleModel() + evt.getRegion()) // Partition by vehicle model and region
-                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new VehiclesInMotionAggregateFunction()).name("AggregateVehiclesInMotion").uid("aggregate-in-motion");
+                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(aggregationWindowSec)))
+                //.aggregate(new VehiclesInMotionAggregateFunction()) // alternative implementation
+                .process(new VehiclesInMotionProcessWindowFunction())
+                .name("AggregateVehiclesInMotion").uid("aggregate-in-motion");
 
         DataStream<AggregateVehicleEvent> aggregateWarnings = enrichedVehicleEvents
-                .filter(new IncludeEventTypes(EventType.WARNINGS)) // Only include warning events
-                // Aggregate counting warnings, per model and per region, every 5 seconds
+                // Only include warning events
+                .filter(new IncludeEventTypes(EventType.WARNINGS))
+                // Aggregate counting warnings, per model and per region, every `aggregationWindowSec` seconds
                 .keyBy(evt -> evt.getVehicleModel() + evt.getRegion()) // Partition by vehicle model and region
-                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(5)))
-                .aggregate(new WarningsAggregateFunction()).name("AggregateWarnings").uid("aggregate-warnings");
+                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(aggregationWindowSec)))
+                //.aggregate(new WarningsAggregateFunction()) // alternative implementation
+                .process(new WarningsProcessWindowFunction())
+                .name("AggregateWarnings").uid("aggregate-warnings");
 
         aggregateVehicleInMotion
                 // Merge the two streams
                 .union(aggregateWarnings)
+                // Measure lag and event rate
+                .map(new LagAndRateMonitor<>((EventTimeExtractor<AggregateVehicleEvent>) AggregateVehicleEvent::getTimestamp)).name("Monitor")
                 // Map records to Prometheus sink input records
                 .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapWarningsToPromTS")
                 // Key-by time series to ensure order is retained
@@ -161,48 +174,5 @@ public class PreProcessorJob {
 
         // Execute the job
         env.execute("Vehicle Event Pre-processor");
-    }
-
-    // FIXME remove
-    @Deprecated
-    private static class LoggingMapper implements MapFunction<AggregateVehicleEvent, AggregateVehicleEvent> {
-        @Override
-        public AggregateVehicleEvent map(AggregateVehicleEvent event) throws Exception {
-            LOGGER.info("Event after union: {} (empty: {})", event, event.isEmpty());
-            return event;
-        }
-    }
-
-
-    // FIXME delete me
-    @Deprecated
-    private static class OrderChecker<K, E> extends KeyedProcessFunction<K, E, E> {
-        private transient ValueState<Long> lastRecordTimestampState;
-
-        private final Function<E, Long> timestampExtractor;
-
-        public OrderChecker(Function<E, Long> timestampExtractor) {
-            this.timestampExtractor = timestampExtractor;
-        }
-
-        @Override
-        public void open(OpenContext openContext) throws Exception {
-            ValueStateDescriptor<Long> descriptor = new ValueStateDescriptor<>("lastRecordTimestamp", Long.class);
-            lastRecordTimestampState = getRuntimeContext().getState(descriptor);
-        }
-
-        @Override
-        public void processElement(E value, KeyedProcessFunction<K, E, E>.Context ctx, Collector<E> out) throws Exception {
-            Long prevRecordTimestamp = lastRecordTimestampState.value();
-            if (prevRecordTimestamp == null) {
-                prevRecordTimestamp = 0L;
-            }
-            long currentTimestamp = timestampExtractor.apply(value);
-            if (currentTimestamp > 0 && currentTimestamp <= prevRecordTimestamp) {
-                LOGGER.warn("Detected out of order record: curr ts {}. Prev ts {}, key {}", value, prevRecordTimestamp, ctx.getCurrentKey());
-            }
-            lastRecordTimestampState.update(Math.max(currentTimestamp, prevRecordTimestamp));
-            out.collect(value);
-        }
     }
 }

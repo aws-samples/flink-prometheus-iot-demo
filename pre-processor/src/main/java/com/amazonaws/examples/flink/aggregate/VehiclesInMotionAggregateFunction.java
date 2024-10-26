@@ -21,6 +21,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Implementation of vehicles in motion aggregation based on AggregateFunction.
+ * <p>
+ * PROs: Smaller state. Aggregates the results on each event.
+ * <p>
+ * CONs: State serialization overhead. The accumulator contains a Map. This is heavy to serialize/deserialize,
+ * regardless preventing fallback to Kryo defining a custom TypeInfoFactory
+ */
 public class VehiclesInMotionAggregateFunction implements AggregateFunction<EnrichedVehicleEvent, VehiclesInMotionAggregateFunction.Accumulator, AggregateVehicleEvent> {
 
     @AllArgsConstructor

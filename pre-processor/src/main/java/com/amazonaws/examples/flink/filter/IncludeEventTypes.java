@@ -7,6 +7,9 @@ import com.amazonaws.examples.flink.domain.EventType;
 
 import java.util.List;
 
+/**
+ * Filter function to include only specified event types
+ */
 public class IncludeEventTypes implements FilterFunction<EnrichedVehicleEvent> {
     private final List<EventType> eventTypes;
 

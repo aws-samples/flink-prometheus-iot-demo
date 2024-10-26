@@ -6,6 +6,9 @@ import org.apache.flink.util.Collector;
 
 import com.amazonaws.examples.flink.domain.AggregateVehicleEvent;
 
+/**
+ * Converts aggregate records into Prometheus sink input records
+ */
 public class AggregateEventsToPrometheusTimeSeriesMapper implements FlatMapFunction<AggregateVehicleEvent, PrometheusTimeSeries> {
 
     @Override

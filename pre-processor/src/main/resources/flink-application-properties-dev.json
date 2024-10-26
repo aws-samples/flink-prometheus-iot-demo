@@ -4,13 +4,21 @@
     "PropertyMap": {
       "bootstrap.servers": "localhost:9092",
       "topic": "vehicle-events",
-      "group.id": "pre-processor"
+      "group.id": "pre-processor",
+      "max.parallelism": "64"
+    }
+  },
+  {
+    "PropertyGroupId": "Aggregation",
+    "PropertyMap": {
+      "window.size.sec": "5"
     }
   },
   {
     "PropertyGroupId": "PrometheusSink",
     "PropertyMap": {
-      "endpoint.url": "https://aps-workspaces.eu-west-1.amazonaws.com/workspaces/ws-6c062efd-7553-4343-a4cd-c5f7f8b85082/api/v1/remote_write"
+      "endpoint.url": "https://aps-workspaces.eu-west-1.amazonaws.com/workspaces/ws-6c062efd-7553-4343-a4cd-c5f7f8b85082/api/v1/remote_write",
+      "max.request.retry": "5"
     }
   }
 ]

@@ -9,6 +9,9 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.ToString;
 
+/**
+ * A raw event sent by the vehicle
+ */
 @Getter @Setter
 @AllArgsConstructor
 @NoArgsConstructor

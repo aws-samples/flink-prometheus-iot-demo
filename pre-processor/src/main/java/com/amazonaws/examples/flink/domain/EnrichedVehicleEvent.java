@@ -1,6 +1,5 @@
 package com.amazonaws.examples.flink.domain;
 
-import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -9,10 +8,11 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * Adds the vehicle model to each Vehicle vent
+ * Enriched vehicle event with additional vehicle model field
  */
 @EqualsAndHashCode(callSuper = true)
-@Getter @Setter
+@Getter
+@Setter
 @NoArgsConstructor
 @ToString(callSuper = true)
 public class EnrichedVehicleEvent extends VehicleEvent {
