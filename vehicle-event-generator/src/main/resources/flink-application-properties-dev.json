@@ -3,7 +3,9 @@
     "PropertyGroupId": "DataGen",
     "PropertyMap": {
       "events.per.sec": "100",
-      "vehicles": "500"
+      "vehicles": "500",
+      "prob.motion.state.change": "0.01",
+      "prob.warning.change": "0.001"
     }
   },
   {

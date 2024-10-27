@@ -13,7 +13,8 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.PropertiesUtil;
 import org.apache.flink.util.function.SerializableFunction;
 
-import com.amazonaws.examples.flink.datagen.VehicleEventGeneratorFunction;
+import com.amazonaws.examples.flink.datagen.ParallelGeneratorFunction;
+import com.amazonaws.examples.flink.datagen.VehicleEventGeneratorFunction2;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
 import com.amazonaws.examples.flink.monitor.EventTimeExtractor;
 import com.amazonaws.examples.flink.monitor.LagAndRateMonitor;
@@ -60,13 +61,27 @@ public class VehicleEventGeneratorJob {
         int numberOfVehicles = PropertiesUtil.getInt(dataGenProperties, "vehicles", 1);
         Preconditions.checkArgument(numberOfVehicles > 0, "vehicles must be > 0");
 
+        double probabilityMotionStateChange = Double.parseDouble(dataGenProperties.getProperty("prob.motion.state.change", "0.01"));
+        Preconditions.checkArgument(probabilityMotionStateChange > 0, "prob.motion.state.change must be > 0");
+        double probabilityWarningChange = Double.parseDouble(dataGenProperties.getProperty("prob.warning.change", "0.001"));
+        Preconditions.checkArgument(probabilityWarningChange > 0, "prob.warning.change must be > 0");
+
+        ParallelGeneratorFunction<VehicleEvent> generatorFunction = new VehicleEventGeneratorFunction2(
+                numberOfVehicles,
+                VehicleEventGeneratorFunction2.GeneratorConfig.builder()
+                        .probabilityMotionStateChange(probabilityMotionStateChange)
+                        .probabilityWarningChange(probabilityWarningChange)
+                        .build());
+
         LOGGER.info("Data Generator: {} vehicles, {} events/sec across all subtasks", numberOfVehicles, globalEventsPerSec);
+        LOGGER.info("Data Generator: probability motion state change={}%, probability warning change={}%", probabilityMotionStateChange * 100.0, probabilityWarningChange * 100.0);
         return new DataGeneratorSource<>(
-                new VehicleEventGeneratorFunction(numberOfVehicles),
+                generatorFunction,
                 Long.MAX_VALUE,
                 RateLimiterStrategy.perSecond(globalEventsPerSec),
                 TypeInformation.of(VehicleEvent.class));
     }
+
 
     private static KafkaSink<VehicleEvent> createSink(Properties kafkaSinkProperties) {
         String bootstrapServers = kafkaSinkProperties.getProperty("bootstrap.servers");

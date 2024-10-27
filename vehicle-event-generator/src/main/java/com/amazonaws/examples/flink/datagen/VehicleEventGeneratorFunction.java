@@ -22,9 +22,11 @@ import static java.util.Map.entry;
  * Previously generated events for that vehicle are retained in memory, and new generated events are random variations of the previous value,
  * between fixed min and max values.
  */
+@Deprecated
 public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<VehicleEvent> {
     private static final Logger LOG = LoggerFactory.getLogger(VehicleEventGeneratorFunction.class);
 
+    // TODO add African countries and Australia
     public static final String[] REGIONS = {
             "France", "Germany", "Italy", "Spain", "Greece", "Norway", "Sweden", "Switzerland", "Portugal", "Austria",
             "Japan", "South Korea", "China", "India", "Thailand", "Vietnam", "Malaysia", "Indonesia", "Philippines", "Turkey",
@@ -38,6 +40,7 @@ public class VehicleEventGeneratorFunction extends ParallelGeneratorFunction<Veh
     public static final int MIN_ELECTRIC_RPM = -10000;
     public static final int MAX_WARNINGS = 5;
 
+    // TODO makes these parameters configurable
     private static final double MAX_RPM_VARIATION_PER_EVENT = 20.0 / 100;
     private static final double CHANCES_WARNING_TURNING_OFF = 1.0 / 100;
     private static final double CHANCES_WARNING_TURNING_ON = 1.0 / 100;

@@ -19,10 +19,14 @@ public class VehicleModelEnrichmentFunction implements MapFunction<VehicleEvent,
     private static final Logger LOG = LoggerFactory.getLogger(VehicleModelEnrichmentFunction.class);
 
     private static final String[] MODELS = {
-            "Astralis", "Nebulara", "Galantor", "Equinoxia", "Novaris",
-            "Orbitra", "Celestalis", "Astyra", "Polara", "Helion",
-            "Lyraxis", "Vespera", "Peregron", "Solaris", "Eryndor",
-            "Altairis", "Cometis", "Nyxara", "Vegaire", "Androma"
+            "Astralis",
+            "Nebulara",
+            "Galantor",
+            "Equinoxia",
+            "Orbitra",
+            "Nebulara",
+            "Polara",
+            "Helion"
     };
 
     private static String vehicleModel(String vehicleId) {
