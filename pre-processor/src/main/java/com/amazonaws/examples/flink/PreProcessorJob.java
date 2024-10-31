@@ -79,14 +79,13 @@ public class PreProcessorJob {
         String consumerGroupId = kafkaSourceProperties.getProperty("group.id", DEFAULT_CONSUMER_GROUP_ID);
         LOGGER.info("Kafka source: bootstrapServers {}, topic {}, consumerGroup {}", bootstrapServers, topicName, consumerGroupId);
 
-        JsonDeserializationSchema<T> jsonFormat = new JsonDeserializationSchema<>(recordClass);
         return KafkaSource.<T>builder()
                 .setBootstrapServers(bootstrapServers)
                 .setTopics(topicName)
                 .setGroupId(consumerGroupId)
                 .setProperties(kafkaSourceProperties)
                 .setStartingOffsets(OffsetsInitializer.latest())
-                .setValueOnlyDeserializer(jsonFormat)
+                .setValueOnlyDeserializer(new JsonDeserializationSchema<>(recordClass))
                 .build();
     }
 
@@ -119,26 +118,39 @@ public class PreProcessorJob {
             env.setParallelism(4);
         }
 
+        /// Get additional application parameters
 
-        /// Define the data flow
+        // Optionally limit the Kafka source parallelism, to be <= number of partitions in the Kafka topic
+        int kafkaSourceMaxParallelism = PropertiesUtil.getInt(
+                applicationParameters.get("KafkaSource"), "max.parallelism", Integer.MAX_VALUE);
+        Preconditions.checkArgument(kafkaSourceMaxParallelism > 0, "max.parallelism must be > 0");
 
-        int kafkaSourceMaxParallelism = PropertiesUtil.getInt(applicationParameters.get("KafkaSource"), "max.parallelism", Integer.MAX_VALUE);
-        DataStream<EnrichedVehicleEvent> enrichedVehicleEvents = env
+        // Configurable aggregation window size
+        int aggregationWindowSec = PropertiesUtil.getInt(
+                applicationParameters.get("Aggregation"), "window.size.sec", DEFAULT_AGGREGATION_WINDOW_SEC);
+        Preconditions.checkArgument(aggregationWindowSec > 0, "window.size.sec must be > 0");
+
+
+        /// Define the logical flow
+
+        // Read raw events from Kafka (MSK)
+        DataStream<VehicleEvent> rawEvents = env
                 // Read raw events from Kafka
                 .fromSource(
+                        // Create a KafkaSource deserializing VehicleEvent records
                         createKafkaSource(applicationParameters.get("KafkaSource"), VehicleEvent.class),
                         // No watermark needed for processing-time semantics
                         WatermarkStrategy.noWatermarks(),
                         "KafkaSource"
                 ).uid("kafka-source")
                 // Optionally limit the parallelism of the source, to be <= number of partitions in the Kafka topic
-                .setParallelism(Math.min(applicationParallelism, kafkaSourceMaxParallelism))
-                // Enrich adding vehicle model
+                .setParallelism(Math.min(applicationParallelism, kafkaSourceMaxParallelism));
+
+        // Enrich adding vehicle model
+        DataStream<EnrichedVehicleEvent> enrichedVehicleEvents = rawEvents
                 .map(new VehicleModelEnrichmentFunction()).name("EnrichWithModel").uid("enrich-model");
 
-        int aggregationWindowSec = PropertiesUtil.getInt(
-                applicationParameters.get("Aggregation"), "window.size.sec", DEFAULT_AGGREGATION_WINDOW_SEC);
-
+        // Aggregate motor RPM events and derive the number of vehicles in motion, per model and region
         DataStream<AggregateVehicleEvent> aggregateVehicleInMotion = enrichedVehicleEvents
                 // Only include motor events
                 .filter(new IncludeEventTypes(EventType.IC_RPM, EventType.ELECTRIC_RPM))
@@ -146,9 +158,9 @@ public class PreProcessorJob {
                 .keyBy(evt -> evt.getVehicleModel() + evt.getRegion()) // Partition by vehicle model and region
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(aggregationWindowSec)))
                 //.aggregate(new VehiclesInMotionAggregateFunction()) // alternative implementation
-                .process(new VehiclesInMotionProcessWindowFunction())
-                .name("AggregateVehiclesInMotion").uid("aggregate-in-motion");
+                .process(new VehiclesInMotionProcessWindowFunction()).name("AggregateVehiclesInMotion").uid("aggregate-in-motion");
 
+        // Aggregate warning lights events to derive the unique count of warnings, per model and region
         DataStream<AggregateVehicleEvent> aggregateWarnings = enrichedVehicleEvents
                 // Only include warning events
                 .filter(new IncludeEventTypes(EventType.WARNINGS))
@@ -156,9 +168,9 @@ public class PreProcessorJob {
                 .keyBy(evt -> evt.getVehicleModel() + evt.getRegion()) // Partition by vehicle model and region
                 .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(aggregationWindowSec)))
                 //.aggregate(new WarningsAggregateFunction()) // alternative implementation
-                .process(new WarningsProcessWindowFunction())
-                .name("AggregateWarnings").uid("aggregate-warnings");
+                .process(new WarningsProcessWindowFunction()).name("AggregateWarnings").uid("aggregate-warnings");
 
+        // Write output to Prometheus (AMP)
         aggregateVehicleInMotion
                 // Merge the two streams
                 .union(aggregateWarnings)
@@ -168,7 +180,7 @@ public class PreProcessorJob {
                 .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapWarningsToPromTS")
                 // Key-by time series to ensure order is retained
                 .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector()) // Key-by time series to ensure order is retained
-                // Attach
+                // Attach the sink
                 .sinkTo(createPrometheusSink(applicationParameters.get("PrometheusSink"))).name("PrometheusSink").uid("prometheus-sink");
 
 
