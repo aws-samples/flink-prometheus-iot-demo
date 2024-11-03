@@ -32,7 +32,7 @@ public class RawEventWriterJob {
     private static final Logger LOGGER = LoggerFactory.getLogger(RawEventWriterJob.class);
 
     private static final String DEFAULT_TOPIC_NAME = "vehicle-events";
-    private static final String DEFAULT_CONSUMER_GROUP_ID = "pre-processor";
+    private static final String DEFAULT_CONSUMER_GROUP_ID = "raw-event-writer";
     private static final int DEFAULT_MAX_REQUEST_RETRY = 100;
 
     private static boolean isLocal(StreamExecutionEnvironment env) {

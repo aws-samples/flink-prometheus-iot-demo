@@ -36,5 +36,5 @@ build/
 ### Mac OS ###
 .DS_Store
 
-### Local Maven Repo - for release previews ###
-/local-repo/**/_remote.repositories
+### Ignore local Maven Repo - for release previews ###
+/local-repo
