@@ -92,7 +92,7 @@ All three classes must have a similar Run configuration:
 2. Run `vehicle-event-generator` > `VehicleEventGeneratorJob.java` from IntelliJ as a normal Java application
 3. To verify the generator is correctly publishing events to the local Kafka
    * Open the Kafka UI console at [http://localhost:8080](http://localhost:8080)
-   * Select *Topics* > `vehicle_events`> *Messages* to view the events
+   * Select *Topics* > `vehicle-events`> *Messages* to view the events
 4. Run `pre-processor` > `PreProcessorJob.jar`
 
 After a few seconds you should see datapoints appearing on the Grafana dashboard.

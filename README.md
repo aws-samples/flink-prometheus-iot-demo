@@ -139,23 +139,66 @@ See [Setup for running the demo locally](docs/local-setup.md) for details.
 
 ## Flink applications runtime configuration
 
+Runtime configuration of the Flink jobs.
+
 ### Configuring Vehicle event generator
 
-TBD
+Runtime properties for [Vehicle event generator](./vehicle-event-generator).
+
+To configure the application for running locally modify [this JSON file](./vehicle-event-generator/src/main/resources/flink-application-properties-dev.json).
+
+| Group ID      | Key                        | Default          | Description                                                                                                                                                         |
+|---------------|----------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `KafkaSink`   | `bootstrap.servers`        | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
+| `KafkaSink` | `topic`                    | `vehicle-events` | Topic name                                                                                                                                                          |
+| `DataGen`     | `vehicles`                 | `1`              | Number of simulated vehicles                                                                                                                                        |
+| `DataGen`     | `events.per.sec`           | n/a              | Number of simulated vehicle events generated per second                                                                                                             |
+| `DataGen`     | `prob.motion.state.change` | `0.01`           | Probability of each simulated vehicle to change its motion status, every time an event for that vehicle is generated (double, between `0.0` and `1.0`)              |
+| `DataGen`     | `prob.warning.change`      | `0.001`          | Probability the number of warning lights will change in each simulated vehicle, every time an event for that vehicle is generated (double, between `0.0` and `1.0`) |
+
+> Note: the "probability" parameters are used to make the randomly generated data a bit more "realistic" but
+> they are not really important for the demo.
 
 ### Configuring Pre-processor
 
-TBD
+Runtime properties for [Pre-processor](./pre-processor).
+
+To configure the application for running locally modify [this JSON file](./pre-processor/src/main/resources/flink-application-properties-dev.json).
+
+| Group ID      | Key                        | Default          | Description                                                                                                                                                         |
+|---------------|----------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `KafkaSource` | `bootstrap.servers`        | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
+| `KafkaSource` | `topic`                    | `vehicle-events` | Topic name                                                                                                                                                          |
+| `KafkaSource` | `group.id` | `pre-processor`  | Consumer Group ID |
+| `KafkaSource` | `max.parallelism` | N/A              | Max parallelism of the source operator. I can be used to limit the parallelism when the application parallelism is > partitions in the source topic. If not specified, the source uses the application parallelism. |
+| `Aggregation` | `window.size.sec` | `5`              | Aggregation window, in seconds |
+| `PrometheusSink` | `endpoint.url` | N/A | Premetheus Remote-Write endpoint URL |
+| `PrometheusSink` | `max.request.retry` | `100` | Max number of retries for write retryable errors (e.g. throttling) before the sink discard the write request and continue. |
+
 
 ### Configuring Raw event writer
 
-TBD
+Runtime properties for [Raw event writer](./raw-event-writer).
+
+To configure the application for running locally modify [this JSON file](./raw-event-writer/src/main/resources/flink-application-properties-dev.json).
+
+
+| Group ID      | Key                        | Default          | Description                                                                                                                                                         |
+|---------------|----------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `KafkaSource` | `bootstrap.servers`        | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
+| `KafkaSource` | `topic`                    | `vehicle-events` | Topic name                                                                                                                                                          |
+| `KafkaSource` | `group.id` | `pre-processor`  | Consumer Group ID |
+| `KafkaSource` | `max.parallelism` | N/A              | Max parallelism of the source operator. I can be used to limit the parallelism when the application parallelism is > partitions in the source topic. If not specified, the source uses the application parallelism. |
+| `PrometheusSink` | `endpoint.url` | N/A | Premetheus Remote-Write endpoint URL |
+| `PrometheusSink` | `max.request.retry` | `100` | Max number of retries for write retryable errors (e.g. throttling) before the sink discard the write request and continue. |
+
 
 ---
 
 ## Known limitations and possible extensions
 
 TBD
+
 * AMP quotas
 * Limit events per second when using the [Raw event writer](./raw-event-writer) - AMP and MSF quotas
 * MSK authentication

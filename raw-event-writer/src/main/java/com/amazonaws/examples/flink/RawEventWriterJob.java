@@ -98,10 +98,17 @@ public class RawEventWriterJob {
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         final Map<String, Properties> applicationParameters = loadApplicationProperties(env);
+        int applicationParallelism = env.getParallelism();
 
         if (isLocal(env)) {
             env.setParallelism(2);
         }
+
+        // Optionally limit the Kafka source parallelism, to be <= number of partitions in the Kafka topic
+        int kafkaSourceMaxParallelism = PropertiesUtil.getInt(
+                applicationParameters.get("KafkaSource"), "max.parallelism", Integer.MAX_VALUE);
+        Preconditions.checkArgument(kafkaSourceMaxParallelism > 0, "max.parallelism must be > 0");
+
 
         /// Define the data flow
 
@@ -112,6 +119,8 @@ public class RawEventWriterJob {
                         WatermarkStrategy.noWatermarks(),
                         "KafkaSource"
                 ).uid("kafka-source")
+                // Optionally limit the source parallelism to be <= number of partitions in the Kafka topic
+                .setParallelism(Math.min(applicationParallelism, kafkaSourceMaxParallelism))
                 // Key by vehicleId and eventType to ensure order is retained
                 .keyBy(evt -> evt.getVehicleId() + evt.getEventType())
                 // Map records to Prometheus sink input records

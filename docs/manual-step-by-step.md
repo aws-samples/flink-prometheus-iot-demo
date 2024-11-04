@@ -84,7 +84,7 @@ Once the application is created, modify the configuration as follows:
 
 Add the following Runtime properties:
 
-| Groupd ID   | Key                  | Value                      |
+| Group ID    | Key                  | Value                      |
 |-------------|----------------------|----------------------------|
 | `DataGen`   | `events.per.sec`     | `50000`                    |
 | `DataGen`   | `vehicles`           | `10000`                    |
@@ -110,7 +110,7 @@ Once the application is created, modify the configuration as follows:
 
 Add the following Runtime properties:
 
-| Groupd ID        | Key                 | Value                             |
+| Group ID         | Key                 | Value                             |
 |------------------|---------------------|-----------------------------------|
 | `KafkaSource`    | `bootstrap.servers` | the MSK plaintext endpoint        |
 | `PrometheusSink` | `endpoint.url`      | the AMP remote-write endpoint URL |
@@ -143,7 +143,7 @@ Once the application is created, modify the configuration as follows:
 
 Add the following Runtime properties:
 
-| Groupd ID        | Key                 | Value                             |
+| Group ID         | Key                 | Value                             |
 |------------------|---------------------|-----------------------------------|
 | `KafkaSource`    | `bootstrap.servers` | the MSK plaintext endpoint        |
 | `PrometheusSink` | `endpoint.url`      | the AMP remote-write endpoint URL |

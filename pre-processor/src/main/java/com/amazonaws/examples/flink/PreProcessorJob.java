@@ -143,7 +143,7 @@ public class PreProcessorJob {
                         WatermarkStrategy.noWatermarks(),
                         "KafkaSource"
                 ).uid("kafka-source")
-                // Optionally limit the parallelism of the source, to be <= number of partitions in the Kafka topic
+                // Optionally limit the parallelism of the source to be <= number of partitions in the Kafka topic
                 .setParallelism(Math.min(applicationParallelism, kafkaSourceMaxParallelism));
 
         // Enrich adding vehicle model
