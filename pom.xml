@@ -22,7 +22,7 @@
         <maven.compiler.target>${target.java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <prometheus.connector.version>1.0.0-SNAPSHOT</prometheus.connector.version>
+        <prometheus.connector.version>1.0.0-1.20</prometheus.connector.version>
         <flink.version>1.20.0</flink.version>
         <aws.connector.version>4.3.0-1.19</aws.connector.version>
         <kafka.connector.version>3.2.0-1.19</kafka.connector.version>
