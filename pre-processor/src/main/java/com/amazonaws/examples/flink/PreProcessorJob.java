@@ -37,6 +37,7 @@ import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.flink.connector.prometheus.sink.PrometheusSinkConfiguration.OnErrorBehavior.DISCARD_AND_CONTINUE;
@@ -126,8 +127,9 @@ public class PreProcessorJob {
         Preconditions.checkArgument(kafkaSourceMaxParallelism > 0, "max.parallelism must be > 0");
 
         // Configurable aggregation window size
-        int aggregationWindowSec = PropertiesUtil.getInt(
-                applicationParameters.get("Aggregation"), "window.size.sec", DEFAULT_AGGREGATION_WINDOW_SEC);
+        int aggregationWindowSec = Optional.ofNullable(applicationParameters.get("Aggregation"))
+                .map(params -> PropertiesUtil.getInt(params, "window.size.sec", DEFAULT_AGGREGATION_WINDOW_SEC))
+                .orElse(DEFAULT_AGGREGATION_WINDOW_SEC);
         Preconditions.checkArgument(aggregationWindowSec > 0, "window.size.sec must be > 0");
 
 
