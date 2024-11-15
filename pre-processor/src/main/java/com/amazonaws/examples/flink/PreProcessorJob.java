@@ -1,5 +1,6 @@
 package com.amazonaws.examples.flink;
 
+import com.amazonaws.examples.flink.map.AggregateEventsToPrometheusTimeSeriesMapper;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -26,7 +27,6 @@ import com.amazonaws.examples.flink.domain.EventType;
 import com.amazonaws.examples.flink.domain.VehicleEvent;
 import com.amazonaws.examples.flink.enrich.VehicleModelEnrichmentFunction;
 import com.amazonaws.examples.flink.filter.IncludeEventTypes;
-import com.amazonaws.examples.flink.map.AggregateEventsToPrometheusTimeSeriesMapper;
 import com.amazonaws.examples.flink.monitor.EventTimeExtractor;
 import com.amazonaws.examples.flink.monitor.LagAndRateMonitor;
 import com.amazonaws.services.kinesisanalytics.runtime.KinesisAnalyticsRuntime;
@@ -179,7 +179,7 @@ public class PreProcessorJob {
                 // Measure lag and event rate
                 .map(new LagAndRateMonitor<>((EventTimeExtractor<AggregateVehicleEvent>) AggregateVehicleEvent::getTimestamp)).name("Monitor")
                 // Map records to Prometheus sink input records
-                .flatMap(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapWarningsToPromTS")
+                .map(new AggregateEventsToPrometheusTimeSeriesMapper()).name("MapAggregateToPromTS")
                 // Key-by time series to ensure order is retained
                 .keyBy(new PrometheusTimeSeriesLabelsAndMetricNameKeySelector()) // Key-by time series to ensure order is retained
                 // Attach the sink
