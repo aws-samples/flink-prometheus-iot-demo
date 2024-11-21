@@ -1,0 +1,3 @@
+boto3==1.26.139
+aws-msk-iam-sasl-signer-python==1.0.1
+kafka-python==2.0.2
