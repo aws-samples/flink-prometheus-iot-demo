@@ -48,10 +48,10 @@ We will choose AWS Identity Center, it might prompt you to create an User.
 
 5. For permission type we will select **Service Managed**
 6. Leave Outbound VPC Connection as default
-   ![grafana-console](../images/grafana-setup/create-workspace-3.png)
+![grafana-console](../images/grafana-setup/create-workspace-3.png)
 
 7. Leave Network Access Control as **Open Access**. If needed you can configure so only resources from a given VPC are able to reach the workspace
-   ![grafana-console](../images/grafana-setup/create-workspace-4.png)
+![grafana-console](../images/grafana-setup/create-workspace-4.png)
 
 8. Leave **IAM Permission access settings** as default
 9. For Data sources, please select **Amazon Managed Service for Prometheus** and click **Next**
