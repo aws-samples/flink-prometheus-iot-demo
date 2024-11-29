@@ -25,7 +25,7 @@ MSK cluster and Managed Flink applications can also use the same Security Group:
 Create an MSK cluster following [this documentation](https://docs.aws.amazon.com/msk/latest/developerguide/create-cluster.html)
 
 * MSK cluster type: Provisioned
-* Broker size: `kafka.m7g.large`
+* Broker size: `kafka.m7g.xlarge`
 * Storage: 10 GB
 * VPC and Subnets: select the 3 private Subnets
 
@@ -160,62 +160,6 @@ Modify the application IAM Role adding the policy `AmazonPrometheusRemoteWriteAc
 
 Run the application
 
+### Setup Grafana and the Grafana Dashboard
 
-### Set up Managed Grafana workspace
-
-Create a Managed Grafana workspace.
-
-* Authentication access: AWS IAM Identity Center
-* Permission type: service managed
-* Network access control: Open access
-* IAM permission access settings
-    * Current account
-    * Data sources: select *Amazon Managed Service for Prometheus*
-
-> Note: for simplicity, the Grafana dashboard is publicly accessible
-
-Take note of the *Grafana workspace URL*
-
-#### Create a user in IAM Identity Center
-
-Follow [these instructions](https://docs.aws.amazon.com/singlesignon/latest/userguide/addusers.html) to create a user
-in IAM Identity Center.
-
-* Only the basic details are requires for the user (username, email, fist and lastname, display name).
-* Password: select *Generate a one-time password that you can share with this user.*
-
-Leave all other default configuration.
-
-Once you created the user, take note of the *AWS access portal URL*, *Username*, and *One-time password*
-
-Access a first time, using the OTP, to set up the password.
-
-**Important**: because the Grafana endpoint is publicly accessible, use a secure password.
-
-#### Set up the Grafana user
-
-You now need to add the IAM Identity user to the Grafana workspace.
-
-1. In the AWS console page of the Grafana workspace, under *Authentication* > *AWS IAM Identity Center (successor to AWS SSO)*
-   select *Assign new user or group*.
-2. Select the identity you created assign it
-3. Then, select again the identity and in the *Action* dropdown choose "Make admin"
-
-### Create Grafana dashboard
-
-1. Access the Grafana dashboard using the *Grafana workspace URL* of the workspace, and the credentials you just created.
-2. Under *Apps* > *AWS Data Source*
-    * Select *Amazon Managed Prometheus*
-    * Select the region where you deployed the AMP workspace
-    * Select the AMP workspace you created
-    * Choose *Add new data source*
-3. Under *Dashboards*
-* *Create dashboard*
-* *Add visualization*
-* Select the AMP data source
-* In  *Query* > *Metric* > *Metric explorer* : choose `vehicles_in_motion`
-* Choose *Run query* - the metrics should appear in the chart, above
-* Change *Panel Title* to "Vehicles in motion"
-* Choose the *Apply* button, on the top right
-4. Repeat *Add visualization* for the "Warnings" metric
-5. Choose the *Save dashboard* icon in the top bar, to save the dashboard
+Follow [these instructions](grafana-setup.md) to set up Amazon Managed Grafana and to create the dashboard.

@@ -28,8 +28,8 @@ The demo includes the following components:
 
 ![Demo architecture](images/demo-architecture.png)
 
-A [Docker Compose stack](./kafka-docker) is also provided, to run Kafka locally and simplify testing and developing.
 
+-- -- --
 
 ## Vehicle telemetry data and pre-processing
 
@@ -102,14 +102,13 @@ You can run the demo on AWS, using [Amazon Managed Service for Apache Flink](htt
 [Amazon Managed Streaming for Apache Kafka (MSK)](https://aws.amazon.com/msk/), [Amazon Managed Service for Prometheus (AMP)](https://aws.amazon.com/prometheus/), 
 and Amazon Managed Grafana.
 
-### Prerequisites for running the demo on AWS
+### Set up using CDK
 
-The demo requires:
-* An MSK cluster with unauthenticated access
-* An [Amazon Managed Service for Prometheus (AMP)](https://aws.amazon.com/prometheus/) workspace
-* An [Amazon Managed Grafana](https://aws.amazon.com/grafana/) workspace
-* A VPC endpoint for AMP data-plane
-* An S3 bucket, for the Flink application artifacts
+Use the [provided CDK stack](./cdk/README.md) to set up the VPC, the MSK cluster, build and deploy the Managed Service for Apache Flink applications.
+
+### (Alternative) Manual set up
+
+Alternatively, you can set up the resources manually, following the [step-by-step instructions](./docs/manual-step-by-step.md)
 
 Additionally, you create and run 3 [Amazon Managed Service for Apache Flink](https://aws.amazon.com/managed-service-apache-flink/)
 applications: 
@@ -117,7 +116,9 @@ applications:
 2. Pre-processor
 3. Raw event writer 
 
-To set up the demo manually, you can follow the [manual step-by-step](docs/manual-step-by-step.md) instruction.
+### Set up Grafana
+
+Regardless you create the stack using CDK or manually, some additional steps are required to set up Grafana and the dashboard, following [these instructions](./docs/grafana-setup.md).
 
 ---
 
@@ -127,11 +128,11 @@ For testing and development, you can run the demo partly locally:
 
 * Run the Flink applications, [Vehicle event generator](./vehicle-event-generator), [Pre-processor](./pre-processor),
   and [Raw event writer](./raw-event-writer) directly in IntelliJ. You do not need to install Apache Flink locally.
-* Run Kafka locally, in a container. This simplifies the development setup not requiring access to MSK from
-  your development machine
+* Run Kafka locally using the provided [Docker compose stack](./kafka-docker). This simplifies the development setup not requiring access to MSK from your development machine.
 * You can use Amazon Managed Prometheus and Amazon Managed Grafana when running the Flink application locally, without
   setting up any special connectivity, as long as on your machine you are using AWS credentials with 
   [Remote-Write permissions](#iam-permissions-to-use-amp-remote-write) to the AMP workspace.
+
 
 See [Setup for running the demo locally](docs/local-setup.md) for details.
 
@@ -165,14 +166,14 @@ Runtime properties for [Pre-processor](./pre-processor).
 
 To configure the application for running locally modify [this JSON file](./pre-processor/src/main/resources/flink-application-properties-dev.json).
 
-| Group ID      | Key                        | Default          | Description                                                                                                                                                         |
-|---------------|----------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `KafkaSource` | `bootstrap.servers`        | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
-| `KafkaSource` | `topic`                    | `vehicle-events` | Topic name                                                                                                                                                          |
-| `KafkaSource` | `group.id` | `pre-processor`  | Consumer Group ID |
-| `KafkaSource` | `max.parallelism` | N/A              | Max parallelism of the source operator. I can be used to limit the parallelism when the application parallelism is > partitions in the source topic. If not specified, the source uses the application parallelism. |
-| `Aggregation` | `window.size.sec` | `5`              | Aggregation window, in seconds |
-| `PrometheusSink` | `endpoint.url` | N/A | Premetheus Remote-Write endpoint URL |
+| Group ID         | Key                 | Default          | Description                                                                                                                                                         |
+|------------------|---------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `KafkaSource`    | `bootstrap.servers` | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
+| `KafkaSource`    | `topic`             | `vehicle-events` | Topic name                                                                                                                                                          |
+| `KafkaSource`    | `group.id`          | `pre-processor`  | Consumer Group ID |
+| `KafkaSource`    | `max.parallelism`   | N/A              | Max parallelism of the source operator. I can be used to limit the parallelism when the application parallelism is > partitions in the source topic. If not specified, the source uses the application parallelism. |
+| `Aggregation`    | `window.size.sec`   | `5`              | Aggregation window, in seconds |
+| `PrometheusSink` | `endpoint.url`      | N/A | Premetheus Remote-Write endpoint URL |
 | `PrometheusSink` | `max.request.retry` | `100` | Max number of retries for write retryable errors (e.g. throttling) before the sink discard the write request and continue. |
 
 
@@ -183,23 +184,22 @@ Runtime properties for [Raw event writer](./raw-event-writer).
 To configure the application for running locally modify [this JSON file](./raw-event-writer/src/main/resources/flink-application-properties-dev.json).
 
 
-| Group ID      | Key                        | Default          | Description                                                                                                                                                         |
-|---------------|----------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `KafkaSource` | `bootstrap.servers`        | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
-| `KafkaSource` | `topic`                    | `vehicle-events` | Topic name                                                                                                                                                          |
-| `KafkaSource` | `group.id` | `pre-processor`  | Consumer Group ID |
-| `KafkaSource` | `max.parallelism` | N/A              | Max parallelism of the source operator. I can be used to limit the parallelism when the application parallelism is > partitions in the source topic. If not specified, the source uses the application parallelism. |
-| `PrometheusSink` | `endpoint.url` | N/A | Premetheus Remote-Write endpoint URL |
-| `PrometheusSink` | `max.request.retry` | `100` | Max number of retries for write retryable errors (e.g. throttling) before the sink discard the write request and continue. |
+| Group ID         | Key                 | Default          | Description                                                                                                                                                         |
+|------------------|---------------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `KafkaSource`    | `bootstrap.servers` | N/A              | Kafka cluster boostrap servers, for unauthenticated plaintext                                                                                                       |
+| `KafkaSource`    | `topic`             | `vehicle-events` | Topic name                                                                                                                                                          |
+| `KafkaSource`    | `group.id`          | `pre-processor`  | Consumer Group ID |
+| `KafkaSource`    | `max.parallelism`   | N/A              | Max parallelism of the source operator. I can be used to limit the parallelism when the application parallelism is > partitions in the source topic. If not specified, the source uses the application parallelism. |
+| `PrometheusSink` | `endpoint.url`      | N/A              | Premetheus Remote-Write endpoint URL |
+| `PrometheusSink` | `max.request.retry` | `100`            | Max number of retries for write retryable errors (e.g. throttling) before the sink discard the write request and continue. |
 
 
 ---
 
-## Known limitations and possible extensions
+## Prometheus quotas and throttling
 
-TBD
+Consult the [Amazon Managed Service for Prometheus Quotas](https://docs.aws.amazon.com/prometheus/latest/userguide/AMP_quotas.html) for the default maximum *Ingestion throughput per workspace*. 
 
-* AMP quotas
-* Limit events per second when using the [Raw event writer](./raw-event-writer) - AMP and MSF quotas
-* MSK authentication
-* Run Prometheus and Grafana locally
+If the ingestion to Prometheus exceed this limit, the Flink application is throttled. This can easily happen with the [Raw event writer](./raw-event-writer). We recommend to create a separate AMP workspace to test writing raw events.
+
+Note that this limit is a soft quota. You can request a quota increase for real environment. Consult the [AMP Quota documentation](https://docs.aws.amazon.com/prometheus/latest/userguide/AMP_quotas.html) for details.

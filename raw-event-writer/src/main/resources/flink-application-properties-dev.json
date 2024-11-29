@@ -10,7 +10,7 @@
   {
     "PropertyGroupId": "PrometheusSink",
     "PropertyMap": {
-      "endpoint.url": "https://aps-workspaces.eu-west-1.amazonaws.com/workspaces/ws-fbd13a3e-c066-4f3c-a38f-48b819721d4f/api/v1/remote_write"
+      "endpoint.url": "https://aps-workspaces.eu-west-1.amazonaws.com/workspaces/ws-012345678-abcd-1234-abcd-0123456789ab/api/v1/remote_write"
     }
   }
 ]
